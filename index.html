@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no">
+        <title>Spam Tester</title>
+        <script src="https://unpkg.com/@cmdcode/tapscript@1.5.3"></script>
+        <script>
+            var spam_tester = {
+                reverseHexString: s => s.match( /[a-fA-F0-9]{2}/g ).reverse().join( '' ),
+                blobToHex: async blob => {
+                    return new Promise( ( resolve, reject ) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve( ( new Uint8Array( reader.result ) ).toHex() );
+                        reader.onerror = reject;
+                        reader.readAsArrayBuffer( blob );
+                    });
+                },
+                getBlockheight: async () => {
+                    var tip_data = await fetch( `https://mempool.guide/api/blocks/tip/height` );
+                    var tip = Number( await tip_data.text() );
+                    return tip;
+                },
+                getBlock: async blockhash => {
+                    var url = `https://mempool.guide/api/block/${blockhash}/raw`;
+                    var data = await fetch( url );
+                    var json = await data.blob();
+                    var hex = await spam_tester.blobToHex( json );
+                    return hex;
+                },
+                decodeCompactSize: compact_size => {
+                    var first_byte = compact_size.substring( 0, 2 ).toLowerCase();
+                    var size = Number( BigInt( `0x${spam_tester.reverseHexString( compact_size.substring( 0, 2 ) )}` ) );
+                    var actual_compact_size = compact_size.substring( 0, 2 );
+                    if ( first_byte === "fd" ) {
+                        var rest = compact_size.substring( 2, 2 + 4 ).toLowerCase();
+                        var size = Number( BigInt( `0x${spam_tester.reverseHexString( rest )}` ) );
+                        var actual_compact_size = compact_size.substring( 0, 6 );
+                    }
+                    if ( first_byte === "fe" ) {
+                        var rest = compact_size.substring( 2, 2 + 8 ).toLowerCase();
+                        var size = Number( BigInt( `0x${spam_tester.reverseHexString( rest )}` ) );
+                        var actual_compact_size = compact_size.substring( 0, 10 );
+                    }
+                    if ( first_byte === "ff" ) {
+                        var rest = compact_size.substring( 2 ).toLowerCase();
+                        var size = Number( BigInt( `0x${spam_tester.reverseHexString( rest )}` ) );
+                        var actual_compact_size = compact_size;
+                    }
+                    return { size, first_byte, actual_compact_size }
+                },
+                parseTransactions: ( num_of_txs, txs ) => {
+                    var rest = txs;
+                    var tx_objects = [];
+                    var loop = rest => {
+                        var tx = {}
+                        tx[ "hex" ] = ``;
+                        tx[ "version" ] = rest.substring( 0, 8 );
+                        tx[ "hex" ] += rest.substring( 0, 8 );
+                        var rest = rest.substring( 8 );
+                        var is_segwit = rest.substring( 0, 4 ) === "0001";
+                        if ( is_segwit ) {
+                            tx[ "segwit_flag" ] = rest.substring( 0, 4 );
+                            tx[ "is_segwit" ] = true;
+                            tx[ "hex" ] += rest.substring( 0, 4 );
+                            rest = rest.substring( 4 );
+                        }
+                        var compact_size = rest.substring( 0, 18 );
+                        var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( compact_size );
+                        tx[ "number_of_inputs" ] = [ size , actual_compact_size ];
+                        tx[ "hex" ] += rest.substring( 0, 2 );
+                        rest = rest.substring( 2 );
+                        if ( first_byte === "fd" ) tx[ "hex" ] += rest.substring( 0, 4 );
+                        if ( first_byte === "fd" ) rest = rest.toString( "hex" ).substring( 4 );
+                        if ( first_byte === "fe" ) tx[ "hex" ] += rest.substring( 0, 8 );
+                        if ( first_byte === "fe" ) rest = rest.substring( 8 );
+                        if ( first_byte === "ff" ) tx[ "hex" ] += rest.substring( 0, 16 );
+                        if ( first_byte === "ff" ) rest = rest.substring( 16 );
+                        var num_of_inputs = size;
+                        var i; for ( i=0; i<num_of_inputs; i++ ) {
+                            tx[ `input_${i}` ] = {txid: rest.substring( 0, 64 ), vout: rest.substring( 64, 64 + 8 )}
+                            tx[ "hex" ] += rest.substring( 0, 64 + 8 );
+                            rest = rest.substring( 64 + 8 );
+                            var compact_size = rest.substring( 0, 18 );
+                            var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( compact_size );
+                            tx[ `input_${i}` ][ "length_of_scriptsig" ] = [ size, actual_compact_size ];
+                            tx[ "hex" ] += rest.substring( 0, 2 );
+                            rest = rest.substring( 2 );
+                            if ( first_byte === "fd" ) tx[ "hex" ] += rest.substring( 0, 4 );
+                            if ( first_byte === "fd" ) rest = rest.toString( "hex" ).substring( 4 );
+                            if ( first_byte === "fe" ) tx[ "hex" ] += rest.substring( 0, 8 );
+                            if ( first_byte === "fe" ) rest = rest.substring( 8 );
+                            if ( first_byte === "ff" ) tx[ "hex" ] += rest.substring( 0, 16 );
+                            if ( first_byte === "ff" ) rest = rest.substring( 16 );
+                            tx[ `input_${i}` ][ "scriptsig" ] = rest.substring( 0, tx[ `input_${i}` ][ "length_of_scriptsig" ][ 0 ] * 2 );
+                            tx[ "hex" ] += rest.substring( 0, tx[ `input_${i}` ][ "length_of_scriptsig" ][ 0 ] * 2 );
+                            rest = rest.substring( tx[ `input_${i}` ][ "length_of_scriptsig" ][ 0 ] * 2 );
+                            tx[ `input_${i}` ][ "sequence" ] = rest.substring( 0, 8 );
+                            tx[ "hex" ] += rest.substring( 0, 8 );
+                            rest = rest.substring( 8 );
+                        }
+                        var compact_size = rest.substring( 0, 18 );
+                        var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( compact_size );
+                        tx[ `num_of_outputs` ] = [ size, actual_compact_size ];
+                        tx[ "hex" ] += rest.substring( 0, 2 );
+                        rest = rest.substring( 2 );
+                        if ( first_byte === "fd" ) tx[ "hex" ] += rest.substring( 0, 4 );
+                        if ( first_byte === "fd" ) rest = rest.toString( "hex" ).substring( 4 );
+                        if ( first_byte === "fe" ) tx[ "hex" ] += rest.substring( 0, 8 );
+                        if ( first_byte === "fe" ) rest = rest.substring( 8 );
+                        if ( first_byte === "ff" ) tx[ "hex" ] += rest.substring( 0, 16 );
+                        if ( first_byte === "ff" ) rest = rest.substring( 16 );
+                        var num_of_outputs = size;
+                        var i; for ( i=0; i<num_of_outputs; i++ ) {
+                            tx[ `output_${i}` ] = {value: rest.substring( 0, 16 )}
+                            tx[ "hex" ] += rest.substring( 0, 16 );
+                            rest = rest.substring( 16 );
+                            var compact_size = rest.substring( 0, 18 );
+                            var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( compact_size );
+                            tx[ `output_${i}` ][ "length_of_scriptPubKey" ] = [ size, actual_compact_size ];
+                            tx[ "hex" ] += rest.substring( 0, 2 );
+                            rest = rest.substring( 2 );
+                            if ( first_byte === "fd" ) tx[ "hex" ] += rest.substring( 0, 4 );
+                            if ( first_byte === "fd" ) rest = rest.toString( "hex" ).substring( 4 );
+                            if ( first_byte === "fe" ) tx[ "hex" ] += rest.substring( 0, 8 );
+                            if ( first_byte === "fe" ) rest = rest.substring( 8 );
+                            if ( first_byte === "ff" ) tx[ "hex" ] += rest.substring( 0, 16 );
+                            if ( first_byte === "ff" ) rest = rest.substring( 16 );
+                            tx[ `output_${i}` ][ "scriptPubKey" ] = scriptPubKey = rest.substring( 0, size * 2 );    
+                            tx[ "hex" ] += rest.substring( 0, size * 2 );
+                            rest = rest.substring( size * 2 );
+                        }
+                        if ( is_segwit ) {
+                            var i; for ( i=0; i<num_of_inputs; i++ ) {
+                                var compact_size = rest.substring( 0, 18 );
+                                var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( compact_size );
+                                tx[ `input_${i}` ][ "num_of_elements_in_witness" ] = [ size, actual_compact_size ];
+                                tx[ `input_${i}` ][ "sizes_of_each_witness_element" ] = [];
+                                tx[ `input_${i}` ][ "witness" ] = [];
+                                tx[ "hex" ] += rest.substring( 0, 2 );
+                                rest = rest.substring( 2 );
+                                if ( first_byte === "fd" ) tx[ "hex" ] += rest.substring( 0, 4 );
+                                if ( first_byte === "fd" ) rest = rest.toString( "hex" ).substring( 4 );
+                                if ( first_byte === "fe" ) tx[ "hex" ] += rest.substring( 0, 8 );
+                                if ( first_byte === "fe" ) rest = rest.substring( 8 );
+                                if ( first_byte === "ff" ) tx[ "hex" ] += rest.substring( 0, 16 );
+                                if ( first_byte === "ff" ) rest = rest.substring( 16 );
+                                var num_of_elements = size;
+                                var j; for ( j=0; j<num_of_elements; j++ ) {
+                                    var compact_size = rest.substring( 0, 18 );
+                                    var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( compact_size );
+                                    tx[ `input_${i}` ][ "sizes_of_each_witness_element" ].push( [ size, actual_compact_size ] );
+                                    tx[ "hex" ] += rest.substring( 0, 2 );
+                                    rest = rest.substring( 2 );
+                                    if ( first_byte === "fd" ) tx[ "hex" ] += rest.substring( 0, 4 );
+                                    if ( first_byte === "fd" ) rest = rest.toString( "hex" ).substring( 4 );
+                                    if ( first_byte === "fe" ) tx[ "hex" ] += rest.substring( 0, 8 );
+                                    if ( first_byte === "fe" ) rest = rest.substring( 8 );
+                                    if ( first_byte === "ff" ) tx[ "hex" ] += rest.substring( 0, 16 );
+                                    if ( first_byte === "ff" ) rest = rest.substring( 16 );
+                                    tx[ `input_${i}` ][ "witness" ].push( rest.substring( 0, size * 2 ) );
+                                    tx[ "hex" ] += rest.substring( 0, size * 2 );
+                                    rest = rest.substring( size * 2 );
+                                }
+                            }
+                        }
+                        tx[ `locktime` ] = rest.substring( 0, 8 );
+                        tx[ "hex" ] += rest.substring( 0, 8 );
+                        rest = rest.substring( 8 );
+                        return [ tx, rest ];
+                    }
+                    var i; for ( i=0; i<num_of_txs; i++ ) {
+                        var [ tx, rest ] = loop( rest );
+                        tx_objects.push( tx );
+                    }
+                    return tx_objects;
+                },
+                getTransactionsFromBlock: block => {
+                    var { size, first_byte, actual_compact_size } = spam_tester.decodeCompactSize( block.substring( 160, 160 + 18 ) );
+                    var txs = block.substring( 160 + 2 );
+                    if ( first_byte === "fd" ) txs = txs.substring( 4 );
+                    if ( first_byte === "fe" ) txs = txs.substring( 8 );
+                    if ( first_byte === "ff" ) txs = txs.substring( 16 );
+                    var tx_objects = spam_tester.parseTransactions( size, txs );
+                    return tx_objects;
+                },
+            }
+        </script>
+        <style>
+            * {
+                box-sizing: border-box;
+                font-size: 1.15rem;
+                font-family: Arial, sans-serif;
+            }
+            html {
+                max-width: 800px;
+                padding: 3rem 1rem;
+                margin: auto;
+                line-height: 1.25;
+                padding: 0;
+            }
+            body {
+                margin: 3rem 1rem;
+                word-wrap: break-word;
+            }
+            h1 {
+                font-size: 2rem;
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
+            input {
+                line-height: 1.25;
+                width: 100%;
+                height: 1.8rem;
+                font-size: 1.15rem;
+                border: 1px solid grey;
+            }
+            .hidden {
+                display: none !important;
+            }
+            .bold {
+                font-weight: bold;
+            }
+            .spam_tx {
+                width: 100%;
+                height: 8rem;
+            }
+            .comparison, .impact_on_core, .impact_on_knots {
+                margin-top: 1rem;
+                padding: 1rem;
+                border: 1px solid black;
+                border-radius: 1rem;
+            }
+            @media screen and (max-width: 600px) {
+            }
+        </style>
+        <script>
+            var $ = document.querySelector.bind( document );
+            var $$ = document.querySelectorAll.bind( document );
+            var url_params = new URLSearchParams( window.location.search );
+            var url_keys = url_params.keys();
+            var $_GET = {}
+            for ( var key of url_keys ) $_GET[ key ] = url_params.get( key );
+            var hash_arr = window.location.href.substring( window.location.href.indexOf( "#" ) ).split( "#" );
+            hash_arr.splice( 0, 1 );
+            var $_HASH = {}
+            hash_arr.forEach( item => {
+                var vals = item.split( "=" );
+                $_HASH[ vals[ 0 ] ] = vals[ 1 ];
+            });
+        </script>
+    </head>
+    <body>
+        <div class="home_page">
+            <h1>Spam Tester</h1>
+            <p>Explore the impact of large inscription spam on Bitcoin Core versus Bitcoin Knots</p>
+            <p class="scanning_block_p">Scanning block: <span class="scanning_block">loading...</span></p>
+            <p class="scanning_explainer">Seeking most recently mined tx with an inscription larger than 100kb but smaller than 400kb</p>
+            <div class="spam_info hidden">
+                <p class="bold">Most recently mined tx with an inscription larger than 100kb but smaller than 400kb</p>
+                <p class="spam_txid">loading...</p>
+                <textarea class="spam_tx" disabled="true">loading...</textarea>
+                <p class="bold">Time in mempool</p>
+                <p class="time_in_mempool">loading...</p>
+                <p class="bold">Tx size</p>
+                <p class="tx_size">loading...</p>
+                <div class="comparison">
+                    <p class="bold" style="text-align: center;">Total impact on Bitcoin Core</p>
+                    <p><span class="bold">Bandwidth consumed:</span> <span class="bandwidth_core">loading...</span></p>
+                    <p><span class="bold">Ram consumed:</span> <span class="ram_core">loading...</span></p>
+                    <p class="bold" style="text-align: center;">Total impact on Bitcoin Knots</p>
+                    <p><span class="bold">Bandwidth consumed:</span> <span class="bandwidth_knots">loading...</span></p>
+                    <p><span class="bold">Ram consumed:</span> <span class="ram_knots">loading...</span></p>
+                </div>
+                <div class="impact_on_core">
+                    <p class="bold" style="text-align: center;">Details about impact on bitcoin core</p>
+                    <p><span class="bold">Bandwidth consumed when first seen:</span> <span class="bw_f_s">loading...</span></p>
+                    <p><span class="bold">Bandwidth consumed when mined:</span> <span class="bw_w_m">loading...</span></p>
+                    <p><span class="bold">Bandwidth consumed by outbound relay:</span> <span class="bw_o_r">loading...</span></p>
+                    <p><span class="bold">Total bandwidth consumed:</span> <span class="bw_t">loading...</span></p>
+                    <p><span class="bold">Ram consumed:</span> <span class="ram">loading...</span></p>
+                    <p><span class="bold">Time in ram when first seen:</span> <span class="ram_time">6888 seconds</span></p>
+                    <p><span class="bold">Extra time in ram when mined:</span> <span class="ram_time_extra">1 second</span></p>
+                </div>
+                <div class="impact_on_knots">
+                    <p class="bold" style="text-align: center;">Details about impact on bitcoin knots</p>
+                    <p><span class="bold">Bandwidth consumed when first seen:</span> <span class="bw_f_s">371 bytes</span></p>
+                    <p><span class="bold">Bandwidth consumed when mined:</span> <span class="bw_w_m">371 bytes</span></p>
+                    <p><span class="bold">Bandwidth consumed by outbound relay:</span> <span class="bw_o_r">0 bytes (filtered transactions are not relayed)</span></p>
+                    <p><span class="bold">Total bandwidth consumed:</span> <span class="bw_t">742 bytes</span></p>
+                    <p><span class="bold">Ram consumed:</span> <span class="ram">371 bytes</span></p>
+                    <p><span class="bold">Time in ram when first seen:</span> <span class="ram_time">1 second</span></p>
+                    <p><span class="bold">Extra time in ram when mined:</span> <span class="ram_time_extra">1 second</span></p>
+                </div>
+            </div>
+        </div>
+        <script>
+            (async()=>{
+                var blockheight = await spam_tester.getBlockheight();
+                var findMostRecentInscription = async blockheight => {
+                    $( '.scanning_block' ).innerText = blockheight;
+                    var blockhash_data = await fetch( `https://mempool.guide/api/block-height/${blockheight}` );
+                    var blockhash = await blockhash_data.text();
+                    var block = await spam_tester.getBlock( blockhash );
+                    var txs = spam_tester.getTransactionsFromBlock( block );
+                    var inscription_txs = [];
+                    txs.forEach( tx => {
+                        if ( tx.is_segwit && tx.hex.length / 2 > 100_000 && tx.hex.length / 2 < 400_000 ) {
+                            //exclude keypath spends and most segwit v0
+                            var i; for ( i=0; i<tx.number_of_inputs[ 0 ]; i++ ) {
+                                var input = tx[ `input_${i}` ];
+                                if ( input.witness.length < 2 ) return;
+                                if ( !input.witness[ input.witness.length - 2 ].includes( "0063036f7264" ) ) continue;
+                                inscription_txs.push( tx );
+                                return;
+                            }
+                        }
+                    });
+                    if ( inscription_txs.length ) {
+                        var mined_at_time_data = await fetch( `https://mempool.guide/api/block/${blockhash}` );
+                        var mined_at_time_json = await mined_at_time_data.json();
+                        var mined_at_time = mined_at_time_json.mediantime;
+                        return [ inscription_txs[ inscription_txs.length - 1 ], mined_at_time ];
+                    }
+                    console.log( `no inscriptions in block ${blockheight}` );
+                    return findMostRecentInscription( blockheight - 1 );
+                }
+                var most_recent_inscription = await findMostRecentInscription( blockheight );
+                var txid = tapscript.Tx.util.getTxid( most_recent_inscription[ 0 ].hex );
+                var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
+                var tx_meta = await tx_meta_data.json();
+                var seen_in_mempool = tx_meta.time;
+                var mined_at_time = most_recent_inscription[ 1 ];
+                var time_in_mempool = Math.abs( mined_at_time - seen_in_mempool );
+                var txsize = most_recent_inscription[ 0 ].hex.length / 2;
+                $( '.spam_txid' ).innerText = txid;
+                $( '.spam_tx' ).innerText = most_recent_inscription[ 0 ].hex;
+                $( '.time_in_mempool' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
+                $( '.tx_size' ).innerText = `${txsize.toLocaleString()} bytes`;
+                $( '.comparison .bandwidth_core' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
+                $( '.comparison .bandwidth_knots' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
+                $( '.comparison .ram_core' ).innerText = `${txsize.toLocaleString()} bytes for ${(time_in_mempool + 1).toLocaleString()} seconds`;
+                $( '.comparison .ram_knots' ).innerText = `${txsize.toLocaleString()} bytes for 2 seconds`;
+                $( '.impact_on_core .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
+                $( '.impact_on_core .bw_w_m' ).innerText = `0 bytes (Bitcoin Core already had this tx in its mempool so it did not need to redownload it)`;
+                $( '.impact_on_core .bw_o_r' ).innerText = `${(txsize * 7).toLocaleString()} bytes (assuming relay to 7 peers)`;
+                $( '.impact_on_core .bw_t' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
+                $( '.impact_on_core .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
+                $( '.impact_on_core .ram_time' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
+                $( '.impact_on_core .ram_time_extra' ).innerText = `1 second`;
+                $( '.impact_on_knots .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
+                $( '.impact_on_knots .bw_w_m' ).innerText = `${txsize.toLocaleString()} bytes (Bitcoin Knots had to redownload this tx because it discarded it previously)`;
+                $( '.impact_on_knots .bw_o_r' ).innerText = `0 bytes (filtered transactions are not relayed)`;
+                $( '.impact_on_knots .bw_t' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
+                $( '.impact_on_knots .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
+                $( '.impact_on_knots .ram_time' ).innerText = `1 second`;
+                $( '.impact_on_knots .ram_time_extra' ).innerText = `1 second`;
+                $( '.scanning_block_p' ).classList.add( "hidden" );
+                $( '.scanning_explainer' ).classList.add( "hidden" );
+                $( '.spam_info' ).classList.remove( "hidden" );
+            })();
+        </script>
+    </body>
+</html>
