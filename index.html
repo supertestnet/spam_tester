@@ -322,7 +322,7 @@
                         var mined_at_time = mined_at_time_json.mediantime;
                         return [ inscription_txs[ inscription_txs.length - 1 ], mined_at_time ];
                     }
-                    console.log( `no inscriptions in block ${blockheight}` );
+                    console.log( `no inscriptions of the right size in block ${blockheight}` );
                     return findMostRecentInscription( blockheight - 1 );
                 }
                 var most_recent_inscription = await findMostRecentInscription( blockheight );
