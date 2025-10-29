@@ -211,8 +211,9 @@
                             var txid = tapscript.Tx.util.getTxid( item.hex );
                             var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
                             var tx_meta = await tx_meta_data.json();
+                            var seen_in_mempool = tx_meta.time;
                         }
-                        inscription_txs.forEach( item => array.push( [ item, mined_at_time, blockheight, tx_meta ] ) );
+                        inscription_txs.forEach( item => array.push( [ item, mined_at_time, blockheight, seen_in_mempool ] ) );
                         return array;
                     }
                     console.log( `no inscriptions of the right size in block ${blockheight}` );
@@ -220,8 +221,7 @@
                 },
                 loadData: async index => {
                     var most_recent_inscription = all_right_sized_inscription_txs[ index ];
-                    var tx_meta = most_recent_inscription[ 3 ];
-                    var seen_in_mempool = tx_meta.time;
+                    var seen_in_mempool = most_recent_inscription[ 3 ];
                     var mined_at_time = most_recent_inscription[ 1 ];
                     var time_in_mempool = Math.abs( mined_at_time - seen_in_mempool );
                     var txsize = most_recent_inscription[ 0 ].hex.length / 2;
