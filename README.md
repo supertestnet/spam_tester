@@ -11,7 +11,7 @@ Specifically, it seeks inscription spam transactions that contained more than 10
 
 Also, Bitcoin Core relays such transactions to its peers, and Knots does not. My tool showcases how much bandwidth such transactions consume, thus showing that spam filters are a technical solution for Knots: you can empirically prove that spam puts less strain on the resources of a Knots node thanks to filters. Thus there is a technical reason for spam filters to exist, and I recommend adding more of them to both systems (Knots and Core).
 
-# Update 2025-10-29
+# 2025-10-29 Update
 
 Today I looked at the Knots codebase and found out that the default size of its extrapool is 10 megabytes:
 
