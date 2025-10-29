@@ -243,7 +243,7 @@
                     $( '.impact_on_core .ram_time_extra' ).innerText = `1 second`;
                     $( '.impact_on_knots .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
                     // $( '.impact_on_knots .bw_w_m' ).innerText = `${txsize.toLocaleString()} bytes (Bitcoin Knots had to redownload this tx because it discarded it previously)`;
-                    $( '.impact_on_knots .bw_w_m' ).innerText = `0 bytes (Bitcoin Knots stored this transaction in its extrapool)`;
+                    $( '.impact_on_knots .bw_w_m' ).innerText = `0 bytes (Bitcoin Knots stored this transaction in its extrapool so it did not need to redownload it)`;
                     $( '.impact_on_knots .bw_o_r' ).innerText = `0 bytes (filtered transactions are not relayed)`;
                     $( '.impact_on_knots .bw_t' ).innerText = `${txsize.toLocaleString()} bytes`;
                     $( '.impact_on_knots .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
