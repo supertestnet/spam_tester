@@ -326,7 +326,7 @@
             <p class="scanning_block_p">Scanning block: <span class="scanning_block">loading...</span></p>
             <p class="scanning_explainer">Seeking most recently mined tx with an inscription larger than 100kb but smaller than 400kb</p>
             <div class="spam_info hidden">
-                <p class="bold">Most recently mined tx with an inscription larger than 100kb but smaller than 400kb</p>
+                <p class="desc bold">Most recently mined tx with an inscription larger than 100kb but smaller than 400kb</p>
                 <textarea class="spam_tx" disabled="true">loading...</textarea>
                 <p><button class="back_btn">Back</button> <button class="next_btn">Next</button></p>
                 <p><span class="bold">Spam txid:</span> <span class="spam_txid">loading...</span></p>
@@ -378,6 +378,7 @@
                 $( '.scanning_block_p' ).classList.remove( "hidden" );
                 $( '.scanning_explainer' ).classList.remove( "hidden" );
                 $( '.scanning_explainer' ).innerText = `Seeking next mined tx with an inscription larger than 100kb but smaller than 400kb`;
+                $( '.desc' ).innerText = `Next mined tx with an inscription larger than 100kb but smaller than 400kb`;
                 $( '.spam_info' ).classList.add( "hidden" );
                 var last_checked_blockheight = all_right_sized_inscription_txs[ all_right_sized_inscription_txs.length - 1 ][ 2 ];
                 all_right_sized_inscription_txs = await spam_tester.addInscriptionsToArray( last_checked_blockheight - 1, all_right_sized_inscription_txs );
