@@ -197,7 +197,7 @@
                                 var input = tx[ `input_${i}` ];
                                 if ( input.witness.length < 2 ) return;
                                 if ( !input.witness[ input.witness.length - 2 ].includes( "0063036f7264" ) ) continue;
-                                inscription_txs.push( tx );
+                                inscription_txs.push( tx.hex );
                                 return;
                             }
                         }
@@ -208,7 +208,7 @@
                         var mined_at_time = mined_at_time_json.mediantime;
                         var i; for ( i=0; i<inscription_txs.length; i++ ) {
                             var item = inscription_txs[ i ];
-                            var txid = tapscript.Tx.util.getTxid( item.hex );
+                            var txid = tapscript.Tx.util.getTxid( item );
                             var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
                             var tx_meta = await tx_meta_data.json();
                             var seen_in_mempool = tx_meta.time;
@@ -224,10 +224,10 @@
                     var seen_in_mempool = most_recent_inscription[ 3 ];
                     var mined_at_time = most_recent_inscription[ 1 ];
                     var time_in_mempool = Math.abs( mined_at_time - seen_in_mempool );
-                    var txsize = most_recent_inscription[ 0 ].hex.length / 2;
-                    var txid = tapscript.Tx.util.getTxid( most_recent_inscription[ 0 ].hex );
+                    var txsize = most_recent_inscription[ 0 ].length / 2;
+                    var txid = tapscript.Tx.util.getTxid( most_recent_inscription[ 0 ] );
                     $( '.spam_txid' ).innerText = txid;
-                    $( '.spam_tx' ).innerText = most_recent_inscription[ 0 ].hex;
+                    $( '.spam_tx' ).innerText = most_recent_inscription[ 0 ];
                     $( '.time_in_mempool' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
                     $( '.tx_size' ).innerText = `${txsize.toLocaleString()} bytes`;
                     $( '.comparison .bandwidth_core' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
