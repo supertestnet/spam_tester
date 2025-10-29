@@ -231,7 +231,7 @@
                     $( '.time_in_mempool' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
                     $( '.tx_size' ).innerText = `${txsize.toLocaleString()} bytes`;
                     $( '.comparison .bandwidth_core' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
-                    $( '.comparison .bandwidth_knots' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
+                    $( '.comparison .bandwidth_knots' ).innerText = `${txsize.toLocaleString()} bytes`;
                     $( '.comparison .ram_core' ).innerText = `${txsize.toLocaleString()} bytes for ${(time_in_mempool + 1).toLocaleString()} seconds`;
                     $( '.comparison .ram_knots' ).innerText = `${txsize.toLocaleString()} bytes for 2 seconds`;
                     $( '.impact_on_core .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
@@ -242,9 +242,10 @@
                     $( '.impact_on_core .ram_time' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
                     $( '.impact_on_core .ram_time_extra' ).innerText = `1 second`;
                     $( '.impact_on_knots .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
-                    $( '.impact_on_knots .bw_w_m' ).innerText = `${txsize.toLocaleString()} bytes (Bitcoin Knots had to redownload this tx because it discarded it previously)`;
+                    // $( '.impact_on_knots .bw_w_m' ).innerText = `${txsize.toLocaleString()} bytes (Bitcoin Knots had to redownload this tx because it discarded it previously)`;
+                    $( '.impact_on_knots .bw_w_m' ).innerText = `0 bytes (Bitcoin Knots stored this transaction in its extrapool)`;
                     $( '.impact_on_knots .bw_o_r' ).innerText = `0 bytes (filtered transactions are not relayed)`;
-                    $( '.impact_on_knots .bw_t' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
+                    $( '.impact_on_knots .bw_t' ).innerText = `${txsize.toLocaleString()} bytes`;
                     $( '.impact_on_knots .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
                     $( '.impact_on_knots .ram_time' ).innerText = `1 second`;
                     $( '.impact_on_knots .ram_time_extra' ).innerText = `1 second`;
