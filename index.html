@@ -24,8 +24,8 @@
                 getBlock: async blockhash => {
                     var url = `https://mempool.guide/api/block/${blockhash}/raw`;
                     var data = await fetch( url );
-                    var json = await data.blob();
-                    var hex = await spam_tester.blobToHex( json );
+                    var blob = await data.blob();
+                    var hex = await spam_tester.blobToHex( blob );
                     return hex;
                 },
                 decodeCompactSize: compact_size => {
@@ -184,6 +184,74 @@
                     var tx_objects = spam_tester.parseTransactions( size, txs );
                     return tx_objects;
                 },
+                addInscriptionsToArray: async ( blockheight, array = [] ) => {
+                    $( '.scanning_block' ).innerText = blockheight;
+                    var blockhash_data = await fetch( `https://mempool.guide/api/block-height/${blockheight}` );
+                    var blockhash = await blockhash_data.text();
+                    var block = await spam_tester.getBlock( blockhash );
+                    var txs = spam_tester.getTransactionsFromBlock( block );
+                    var inscription_txs = [];
+                    txs.forEach( tx => {
+                        if ( tx.is_segwit && tx.hex.length / 2 > 100_000 && tx.hex.length / 2 < 400_000 ) {
+                            var i; for ( i=0; i<tx.number_of_inputs[ 0 ]; i++ ) {
+                                var input = tx[ `input_${i}` ];
+                                if ( input.witness.length < 2 ) return;
+                                if ( !input.witness[ input.witness.length - 2 ].includes( "0063036f7264" ) ) continue;
+                                inscription_txs.push( tx );
+                                return;
+                            }
+                        }
+                    });
+                    if ( inscription_txs.length ) {
+                        var mined_at_time_data = await fetch( `https://mempool.guide/api/block/${blockhash}` );
+                        var mined_at_time_json = await mined_at_time_data.json();
+                        var mined_at_time = mined_at_time_json.mediantime;
+                        var i; for ( i=0; i<inscription_txs.length; i++ ) {
+                            var item = inscription_txs[ i ];
+                            var txid = tapscript.Tx.util.getTxid( item.hex );
+                            var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
+                            var tx_meta = await tx_meta_data.json();
+                        }
+                        inscription_txs.forEach( item => array.push( [ item, mined_at_time, blockheight, tx_meta ] ) );
+                        return array;
+                    }
+                    console.log( `no inscriptions of the right size in block ${blockheight}` );
+                    return spam_tester.addInscriptionsToArray( blockheight - 1, array );
+                },
+                loadData: async index => {
+                    var most_recent_inscription = all_right_sized_inscription_txs[ index ];
+                    var tx_meta = most_recent_inscription[ 3 ];
+                    var seen_in_mempool = tx_meta.time;
+                    var mined_at_time = most_recent_inscription[ 1 ];
+                    var time_in_mempool = Math.abs( mined_at_time - seen_in_mempool );
+                    var txsize = most_recent_inscription[ 0 ].hex.length / 2;
+                    var txid = tapscript.Tx.util.getTxid( most_recent_inscription[ 0 ].hex );
+                    $( '.spam_txid' ).innerText = txid;
+                    $( '.spam_tx' ).innerText = most_recent_inscription[ 0 ].hex;
+                    $( '.time_in_mempool' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
+                    $( '.tx_size' ).innerText = `${txsize.toLocaleString()} bytes`;
+                    $( '.comparison .bandwidth_core' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
+                    $( '.comparison .bandwidth_knots' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
+                    $( '.comparison .ram_core' ).innerText = `${txsize.toLocaleString()} bytes for ${(time_in_mempool + 1).toLocaleString()} seconds`;
+                    $( '.comparison .ram_knots' ).innerText = `${txsize.toLocaleString()} bytes for 2 seconds`;
+                    $( '.impact_on_core .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
+                    $( '.impact_on_core .bw_w_m' ).innerText = `0 bytes (Bitcoin Core already had this tx in its mempool so it did not need to redownload it)`;
+                    $( '.impact_on_core .bw_o_r' ).innerText = `${(txsize * 7).toLocaleString()} bytes (assuming relay to 7 peers)`;
+                    $( '.impact_on_core .bw_t' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
+                    $( '.impact_on_core .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
+                    $( '.impact_on_core .ram_time' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
+                    $( '.impact_on_core .ram_time_extra' ).innerText = `1 second`;
+                    $( '.impact_on_knots .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
+                    $( '.impact_on_knots .bw_w_m' ).innerText = `${txsize.toLocaleString()} bytes (Bitcoin Knots had to redownload this tx because it discarded it previously)`;
+                    $( '.impact_on_knots .bw_o_r' ).innerText = `0 bytes (filtered transactions are not relayed)`;
+                    $( '.impact_on_knots .bw_t' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
+                    $( '.impact_on_knots .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
+                    $( '.impact_on_knots .ram_time' ).innerText = `1 second`;
+                    $( '.impact_on_knots .ram_time_extra' ).innerText = `1 second`;
+                    $( '.scanning_block_p' ).classList.add( "hidden" );
+                    $( '.scanning_explainer' ).classList.add( "hidden" );
+                    $( '.spam_info' ).classList.remove( "hidden" );
+                }
             }
         </script>
         <style>
@@ -260,6 +328,7 @@
             <div class="spam_info hidden">
                 <p class="bold">Most recently mined tx with an inscription larger than 100kb but smaller than 400kb</p>
                 <textarea class="spam_tx" disabled="true">loading...</textarea>
+                <p><button class="back_btn">Back</button> <button class="next_btn">Next</button></p>
                 <p><span class="bold">Spam txid:</span> <span class="spam_txid">loading...</span></p>
                 <p><span class="bold">Time in mempool:</span> <span class="time_in_mempool">loading...</span></p>
                 <p><span class="bold">Tx size:</span> <span class="tx_size">loading...</span></p>
@@ -295,69 +364,37 @@
         </div>
         <p><a href="https://github.com/supertestnet/spam_tester" target="_blank">View on github</a></p>
         <script>
-            (async()=>{
-                var blockheight = await spam_tester.getBlockheight();
-                var findMostRecentInscription = async blockheight => {
-                    $( '.scanning_block' ).innerText = blockheight;
-                    var blockhash_data = await fetch( `https://mempool.guide/api/block-height/${blockheight}` );
-                    var blockhash = await blockhash_data.text();
-                    var block = await spam_tester.getBlock( blockhash );
-                    var txs = spam_tester.getTransactionsFromBlock( block );
-                    var inscription_txs = [];
-                    txs.forEach( tx => {
-                        if ( tx.is_segwit && tx.hex.length / 2 > 100_000 && tx.hex.length / 2 < 400_000 ) {
-                            //exclude keypath spends and most segwit v0
-                            var i; for ( i=0; i<tx.number_of_inputs[ 0 ]; i++ ) {
-                                var input = tx[ `input_${i}` ];
-                                if ( input.witness.length < 2 ) return;
-                                if ( !input.witness[ input.witness.length - 2 ].includes( "0063036f7264" ) ) continue;
-                                inscription_txs.push( tx );
-                                return;
-                            }
-                        }
-                    });
-                    if ( inscription_txs.length ) {
-                        var mined_at_time_data = await fetch( `https://mempool.guide/api/block/${blockhash}` );
-                        var mined_at_time_json = await mined_at_time_data.json();
-                        var mined_at_time = mined_at_time_json.mediantime;
-                        return [ inscription_txs[ inscription_txs.length - 1 ], mined_at_time ];
-                    }
-                    console.log( `no inscriptions of the right size in block ${blockheight}` );
-                    return findMostRecentInscription( blockheight - 1 );
+            var blockheight = null;
+            var blockheights_checked = null;
+            var all_right_sized_inscription_txs = [];
+            var current_index = undefined;
+            $( '.next_btn' ).onclick = async () => {
+                if ( isNaN( current_index ) ) return alert( `wait, the page is still loading` );
+                current_index = current_index + 1;
+                if ( all_right_sized_inscription_txs.length > current_index ) {
+                    spam_tester.loadData( current_index );
+                    return;
                 }
-                var most_recent_inscription = await findMostRecentInscription( blockheight );
-                var txid = tapscript.Tx.util.getTxid( most_recent_inscription[ 0 ].hex );
-                var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
-                var tx_meta = await tx_meta_data.json();
-                var seen_in_mempool = tx_meta.time;
-                var mined_at_time = most_recent_inscription[ 1 ];
-                var time_in_mempool = Math.abs( mined_at_time - seen_in_mempool );
-                var txsize = most_recent_inscription[ 0 ].hex.length / 2;
-                $( '.spam_txid' ).innerText = txid;
-                $( '.spam_tx' ).innerText = most_recent_inscription[ 0 ].hex;
-                $( '.time_in_mempool' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
-                $( '.tx_size' ).innerText = `${txsize.toLocaleString()} bytes`;
-                $( '.comparison .bandwidth_core' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
-                $( '.comparison .bandwidth_knots' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
-                $( '.comparison .ram_core' ).innerText = `${txsize.toLocaleString()} bytes for ${(time_in_mempool + 1).toLocaleString()} seconds`;
-                $( '.comparison .ram_knots' ).innerText = `${txsize.toLocaleString()} bytes for 2 seconds`;
-                $( '.impact_on_core .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
-                $( '.impact_on_core .bw_w_m' ).innerText = `0 bytes (Bitcoin Core already had this tx in its mempool so it did not need to redownload it)`;
-                $( '.impact_on_core .bw_o_r' ).innerText = `${(txsize * 7).toLocaleString()} bytes (assuming relay to 7 peers)`;
-                $( '.impact_on_core .bw_t' ).innerText = `${(txsize * 8).toLocaleString()} bytes`;
-                $( '.impact_on_core .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
-                $( '.impact_on_core .ram_time' ).innerText = `${time_in_mempool.toLocaleString()} seconds`;
-                $( '.impact_on_core .ram_time_extra' ).innerText = `1 second`;
-                $( '.impact_on_knots .bw_f_s' ).innerText = `${txsize.toLocaleString()} bytes`;
-                $( '.impact_on_knots .bw_w_m' ).innerText = `${txsize.toLocaleString()} bytes (Bitcoin Knots had to redownload this tx because it discarded it previously)`;
-                $( '.impact_on_knots .bw_o_r' ).innerText = `0 bytes (filtered transactions are not relayed)`;
-                $( '.impact_on_knots .bw_t' ).innerText = `${(txsize * 2).toLocaleString()} bytes`;
-                $( '.impact_on_knots .ram' ).innerText = `${txsize.toLocaleString()} bytes`;
-                $( '.impact_on_knots .ram_time' ).innerText = `1 second`;
-                $( '.impact_on_knots .ram_time_extra' ).innerText = `1 second`;
-                $( '.scanning_block_p' ).classList.add( "hidden" );
-                $( '.scanning_explainer' ).classList.add( "hidden" );
-                $( '.spam_info' ).classList.remove( "hidden" );
+                $( '.scanning_block_p' ).classList.remove( "hidden" );
+                $( '.scanning_explainer' ).classList.remove( "hidden" );
+                $( '.scanning_explainer' ).innerText = `Seeking next mined tx with an inscription larger than 100kb but smaller than 400kb`;
+                $( '.spam_info' ).classList.add( "hidden" );
+                var last_checked_blockheight = all_right_sized_inscription_txs[ all_right_sized_inscription_txs.length - 1 ][ 2 ];
+                all_right_sized_inscription_txs = await spam_tester.addInscriptionsToArray( last_checked_blockheight - 1, all_right_sized_inscription_txs );
+                spam_tester.loadData( current_index );
+            }
+            $( '.back_btn' ).onclick = async () => {
+                if ( !current_index ) return;
+                current_index = current_index - 1;
+                spam_tester.loadData( current_index );
+            }
+        </script>
+        <script>
+            (async()=>{
+                blockheight = await spam_tester.getBlockheight();
+                all_right_sized_inscription_txs = await spam_tester.addInscriptionsToArray( blockheight );
+                current_index = 0;
+                spam_tester.loadData( current_index );
             })();
         </script>
     </body>
