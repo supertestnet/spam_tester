@@ -184,11 +184,17 @@
                     var tx_objects = spam_tester.parseTransactions( size, txs );
                     return tx_objects;
                 },
-                addInscriptionsToArray: async ( blockheight, array = [] ) => {
+                addInscriptionsToArray: async ( blockheight, array = [], blockhashes = {} ) => {
                     $( '.scanning_block' ).innerText = blockheight;
-                    var blockhash_data = await fetch( `https://mempool.guide/api/block-height/${blockheight}` );
-                    var blockhash = await blockhash_data.text();
+                    if ( blockhashes && blockhashes.hasOwnProperty( blockheight ) ) {
+                        var blockhash = blockhashes[ blockheight ];
+                    } else {
+                        var blockhash_data = await fetch( `https://mempool.guide/api/block-height/${blockheight}` );
+                        var blockhash = await blockhash_data.text();
+                    }
                     var block = await spam_tester.getBlock( blockhash );
+                    var block_header = block.substring( 0, 160 );
+                    blockhashes[ blockheight - 1 ] = spam_tester.parseHeader( block_header ).prevblock;
                     var txs = spam_tester.getTransactionsFromBlock( block );
                     var inscription_txs = [];
                     txs.forEach( tx => {
@@ -203,7 +209,7 @@
                         }
                     });
                     if ( inscription_txs.length ) {
-                        var mined_at_time = spam_tester.parseHeader( block.substring( 0, 160 ) ).timestamp;
+                        var mined_at_time = spam_tester.parseHeader( block_header ).timestamp;
                         var i; for ( i=0; i<inscription_txs.length; i++ ) {
                             var item = inscription_txs[ i ];
                             var txid = tapscript.Tx.util.getTxid( item );
@@ -212,10 +218,10 @@
                             var seen_in_mempool = tx_meta.time;
                         }
                         inscription_txs.forEach( item => array.push( [ item, mined_at_time, blockheight, seen_in_mempool ] ) );
-                        return array;
+                        return [ array, blockhashes ];
                     }
                     console.log( `no inscriptions of the right size in block ${blockheight}` );
-                    return spam_tester.addInscriptionsToArray( blockheight - 1, array );
+                    return spam_tester.addInscriptionsToArray( blockheight - 1, array, blockhashes );
                 },
                 loadData: async index => {
                     var most_recent_inscription = all_right_sized_inscription_txs[ index ];
@@ -383,6 +389,7 @@
             var blockheight = null;
             var blockheights_checked = null;
             var all_right_sized_inscription_txs = [];
+            var blockhashes = {}
             var current_index = undefined;
             $( '.next_btn' ).onclick = async () => {
                 if ( isNaN( current_index ) ) return alert( `wait, the page is still loading` );
@@ -397,7 +404,9 @@
                 $( '.desc' ).innerText = `Next mined tx with an inscription larger than 100kb but smaller than 400kb`;
                 $( '.spam_info' ).classList.add( "hidden" );
                 var last_checked_blockheight = all_right_sized_inscription_txs[ all_right_sized_inscription_txs.length - 1 ][ 2 ];
-                all_right_sized_inscription_txs = await spam_tester.addInscriptionsToArray( last_checked_blockheight - 1, all_right_sized_inscription_txs );
+                var data = await spam_tester.addInscriptionsToArray( last_checked_blockheight - 1, all_right_sized_inscription_txs, blockhashes );
+                all_right_sized_inscription_txs = data[ 0 ];
+                blockhashes = data[ 1 ];
                 spam_tester.loadData( current_index );
             }
             $( '.back_btn' ).onclick = async () => {
@@ -409,7 +418,9 @@
         <script>
             (async()=>{
                 blockheight = await spam_tester.getBlockheight();
-                all_right_sized_inscription_txs = await spam_tester.addInscriptionsToArray( blockheight );
+                var data = await spam_tester.addInscriptionsToArray( blockheight, [], blockhashes );
+                all_right_sized_inscription_txs = data[ 0 ];
+                blockhashes = data[ 1 ];
                 current_index = 0;
                 spam_tester.loadData( current_index );
             })();
