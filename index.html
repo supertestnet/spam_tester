@@ -203,9 +203,7 @@
                         }
                     });
                     if ( inscription_txs.length ) {
-                        var mined_at_time_data = await fetch( `https://mempool.guide/api/block/${blockhash}` );
-                        var mined_at_time_json = await mined_at_time_data.json();
-                        var mined_at_time = mined_at_time_json.mediantime;
+                        var mined_at_time = spam_tester.parseHeader( block.substring( 0, 160 ) ).timestamp;
                         var i; for ( i=0; i<inscription_txs.length; i++ ) {
                             var item = inscription_txs[ i ];
                             var txid = tapscript.Tx.util.getTxid( item );
@@ -252,7 +250,24 @@
                     $( '.scanning_block_p' ).classList.add( "hidden" );
                     $( '.scanning_explainer' ).classList.add( "hidden" );
                     $( '.spam_info' ).classList.remove( "hidden" );
-                }
+                },
+                parseHeader: header => {
+                    var block_info = {}
+                    var reverseHexString = s => s.match(/[a-fA-F0-9]{2}/g).reverse().join('');
+                    block_info.version = reverseHexString( header.substring( 0, 8 ) );
+                    header = header.substring( 8 );
+                    block_info.prevblock = reverseHexString( header.substring( 0, 64 ) );
+                    header = header.substring( 64 );
+                    block_info.merkle_root = reverseHexString( header.substring( 0, 64 ) );
+                    header = header.substring( 64 );
+                    block_info.timestamp_hex = reverseHexString( header.substring( 0, 8 ) );
+                    block_info.timestamp = parseInt( block_info.timestamp_hex, 16 );
+                    header = header.substring( 8 );
+                    block_info.difficulty = reverseHexString( header.substring( 0, 8 ) );
+                    header = header.substring( 8 );
+                    block_info.nonce = reverseHexString( header );
+                    return block_info;
+                },
             }
         </script>
         <style>
