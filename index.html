@@ -195,6 +195,7 @@
                     var block = await spam_tester.getBlock( blockhash );
                     var block_header = block.substring( 0, 160 );
                     blockhashes[ blockheight - 1 ] = spam_tester.parseHeader( block_header ).prevblock;
+                    var mined_at_time = spam_tester.parseHeader( block_header ).timestamp;
                     var txs = spam_tester.getTransactionsFromBlock( block );
                     var inscription_txs = [];
                     txs.forEach( tx => {
@@ -203,24 +204,22 @@
                                 var input = tx[ `input_${i}` ];
                                 if ( input.witness.length < 2 ) return;
                                 if ( !input.witness[ input.witness.length - 2 ].includes( "0063036f7264" ) ) continue;
-                                inscription_txs.push( tx.hex );
+                                var txid = tapscript.Tx.util.getTxid( tx.hex );
+                                var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
+                                var tx_meta = await tx_meta_data.json();
+                                var seen_in_mempool = tx_meta.time;
+                                if ( !Math.abs( mined_at_time - seen_in_mempool ) ) continue;
+                                inscription_txs.push( [ tx.hex, seen_in_mempool ] );
                                 return;
                             }
                         }
                     });
                     if ( inscription_txs.length ) {
-                        var mined_at_time = spam_tester.parseHeader( block_header ).timestamp;
-                        var i; for ( i=0; i<inscription_txs.length; i++ ) {
-                            var item = inscription_txs[ i ];
-                            var txid = tapscript.Tx.util.getTxid( item );
-                            var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
-                            var tx_meta = await tx_meta_data.json();
-                            var seen_in_mempool = tx_meta.time;
-                        }
-                        inscription_txs.forEach( item => array.push( [ item, mined_at_time, blockheight, seen_in_mempool ] ) );
+                        var i; for ( i=0; i<inscription_txs.length; i++ ) var item = inscription_txs[ i ];
+                        inscription_txs.forEach( item => array.push( [ item[ 0 ], mined_at_time, blockheight, item[ 1 ] ] ) );
                         return [ array, blockhashes ];
                     }
-                    console.log( `no inscriptions of the right size in block ${blockheight}` );
+                    console.log( `no inscriptions in block ${blockheight} that had the right size and spent some time in the mempool` );
                     return spam_tester.addInscriptionsToArray( blockheight - 1, array, blockhashes );
                 },
                 loadData: async index => {
