@@ -198,11 +198,14 @@
                     var mined_at_time = spam_tester.parseHeader( block_header ).timestamp;
                     var txs = spam_tester.getTransactionsFromBlock( block );
                     var inscription_txs = [];
-                    txs.forEach( tx => {
+                    var j; for ( j=0; j<txs.length; j++ ) {
+                        var tx = txs[ j ];
                         if ( tx.is_segwit && tx.hex.length / 2 > 100_000 && tx.hex.length / 2 < 400_000 ) {
+                            var finished = false;
                             var i; for ( i=0; i<tx.number_of_inputs[ 0 ]; i++ ) {
+                                if ( finished ) continue;
                                 var input = tx[ `input_${i}` ];
-                                if ( input.witness.length < 2 ) return;
+                                if ( input.witness.length < 2 ) continue;
                                 if ( !input.witness[ input.witness.length - 2 ].includes( "0063036f7264" ) ) continue;
                                 var txid = tapscript.Tx.util.getTxid( tx.hex );
                                 var tx_meta_data = await fetch( `https://api.blockchain.info/haskoin-store/btc/transaction/${txid}` );
@@ -210,10 +213,11 @@
                                 var seen_in_mempool = tx_meta.time;
                                 if ( !Math.abs( mined_at_time - seen_in_mempool ) ) continue;
                                 inscription_txs.push( [ tx.hex, seen_in_mempool ] );
-                                return;
+                                finished = true;
                             }
+                            if ( finished ) continue;
                         }
-                    });
+                    }
                     if ( inscription_txs.length ) {
                         var i; for ( i=0; i<inscription_txs.length; i++ ) var item = inscription_txs[ i ];
                         inscription_txs.forEach( item => array.push( [ item[ 0 ], mined_at_time, blockheight, item[ 1 ] ] ) );
