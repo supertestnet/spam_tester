@@ -7,6 +7,7 @@
         <script src="https://unpkg.com/@cmdcode/tapscript@1.5.3"></script>
         <script>
             var spam_tester = {
+                explorer: "mempool.space",
                 reverseHexString: s => s.match( /[a-fA-F0-9]{2}/g ).reverse().join( '' ),
                 blobToHex: async blob => {
                     return new Promise( ( resolve, reject ) => {
@@ -17,12 +18,12 @@
                     });
                 },
                 getBlockheight: async () => {
-                    var tip_data = await fetch( `https://mempool.guide/api/blocks/tip/height` );
+                    var tip_data = await fetch( `https://${spam_tester.explorer}/api/blocks/tip/height` );
                     var tip = Number( await tip_data.text() );
                     return tip;
                 },
                 getBlock: async blockhash => {
-                    var url = `https://mempool.guide/api/block/${blockhash}/raw`;
+                    var url = `https://${spam_tester.explorer}/api/block/${blockhash}/raw`;
                     var data = await fetch( url );
                     var blob = await data.blob();
                     var hex = await spam_tester.blobToHex( blob );
@@ -189,7 +190,7 @@
                     if ( blockhashes && blockhashes.hasOwnProperty( blockheight ) ) {
                         var blockhash = blockhashes[ blockheight ];
                     } else {
-                        var blockhash_data = await fetch( `https://mempool.guide/api/block-height/${blockheight}` );
+                        var blockhash_data = await fetch( `https://${spam_tester.explorer}/api/block-height/${blockheight}` );
                         var blockhash = await blockhash_data.text();
                     }
                     var block = await spam_tester.getBlock( blockhash );
